@@ -1,0 +1,11 @@
+streamlit
+pandas
+numpy
+plotly
+scikit-learn
+matplotlib
+sqlalchemy
+psycopg2-binary
+category-encoders
+pyarrow
+joblib
