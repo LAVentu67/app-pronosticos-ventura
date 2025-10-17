@@ -13,7 +13,7 @@ import os
 import toml
 import unicodedata
 from io import BytesIO
-
+import requests
 # --- Configuración de la Página de Streamlit ---
 st.set_page_config(
     page_title="Pronostico de Precio Ventura",

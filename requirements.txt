@@ -2,11 +2,12 @@ streamlit
 pandas
 numpy
 plotly
+joblib
+SQLAlchemy
 scikit-learn
 matplotlib
-sqlalchemy
+toml
 psycopg2-binary
-category-encoders
 pyarrow
-joblib
 openpyxl
+requests 
