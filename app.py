@@ -10,6 +10,9 @@ from sqlalchemy import create_engine, text
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import matplotlib.pyplot as plt
 import os
+import toml
+import unicodedata
+from io import BytesIO
 
 # --- Configuración de la Página de Streamlit ---
 st.set_page_config(
@@ -25,7 +28,7 @@ st.markdown("""
     :root {
         --primary-color: #5C1212;
         --sidebar-bg-color: #212529;
-        --app-bg-color: #f0f2f5;
+        --app-bg-color: #f0f2ff;
         --white: #ffffff;
     }
     body { font-family: 'Roboto', sans-serif; background-color: var(--app-bg-color); }
@@ -54,10 +57,20 @@ pio.templates['ventura_theme'] = custom_template
 pio.templates.default = 'ventura_theme'
 
 # --- Banner principal ---
-st.markdown('<div class="title-banner">Análisis por Vehiculos Ventura</div>', unsafe_allow_html=True)
+st.markdown('<div class="title-banner">Análisis de Ventas Ventura</div>', unsafe_allow_html=True)
+
+# --- FUNCIÓN DE NORMALIZACIÓN ---
+def normalize_text(text):
+    if not isinstance(text, str):
+        return ""
+    try:
+        nfkd_form = unicodedata.normalize('NFD', text.upper())
+        text_cleaned = " ".join("".join([c for c in nfkd_form if not unicodedata.combining(c)]).split())
+        return text_cleaned
+    except:
+        return text
 
 # --- FUNCIONES OPTIMIZADAS ---
-
 @st.cache_resource
 def cargar_recursos_iniciales():
     try:
@@ -123,6 +136,14 @@ def obtener_datos_filtrados(_engine, filtros_seleccionados):
         for col in ['FECHA_DE_INGRESO', 'FECHA_DE_PAGO', 'FECHA_DE_SUBASTA']:
             if col in df.columns: df[col] = pd.to_datetime(df[col], errors='coerce')
     return df
+
+@st.cache_data
+def to_excel(df):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='DatosFiltrados')
+    processed_data = output.getvalue()
+    return processed_data
 
 def display_historical_analysis(df):
     st.markdown('<fieldset class="shiny-fieldset"><legend class="shiny-legend">Análisis de Selección</legend>', unsafe_allow_html=True)
@@ -213,11 +234,9 @@ def generate_comparison_plots(_dataframe, real_col, pred_value, _pipeline, _inst
 
 # --- Carga de Recursos Iniciales ---
 recursos_iniciales = cargar_recursos_iniciales()
-
 if any(res is None for res in recursos_iniciales):
     st.error("La aplicación no pudo cargar su configuración inicial.")
     st.stop()
-
 historical_stats, feature_cols, engine, opciones_filtros = recursos_iniciales
 
 # --- INICIALIZAR SESSION STATE ---
@@ -225,13 +244,16 @@ if 'analysis_run' not in st.session_state:
     st.session_state.analysis_run = False
 if 'df_filtrado' not in st.session_state:
     st.session_state.df_filtrado = pd.DataFrame()
+if 'cliente_autenticado' not in st.session_state:
+    st.session_state.cliente_autenticado = None
 
-# --- INTERFAZ DE USUARIO (SIDEBAR y LOGO) ---
-st.sidebar.image("data:image/png;base64,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", use_container_width=True)
+# --- INTERFAZ DE USUARIO (SIDEBAR) ---
+st.sidebar.image("https://tse1.mm.bing.net/th/id/OIP.dZs9yNpJVa2kZjoE9rx54gAAAA?cb=12&rs=1&pid=ImgDetMain&o=7&rm=3", use_container_width=True)
 st.sidebar.header("Filtros de análisis")
 
 if st.sidebar.button("Eliminar Filtros"):
     st.session_state.analysis_run = False
+    st.session_state.cliente_autenticado = None
     keys_to_reset = [key for key in st.session_state if key.endswith('_widget')]
     for key in keys_to_reset:
         st.session_state[key] = 'TODOS'
@@ -243,10 +265,50 @@ modelo_sel = st.sidebar.selectbox("Modelo", ["TODOS"] + sorted(modelos_disponibl
 condicion_sel = st.sidebar.selectbox("Condición de Venta", ["TODOS"] + opciones_filtros['condiciones'])
 año_sel = st.sidebar.selectbox("Año del Modelo", ["TODOS"] + opciones_filtros['anios'])
 st.sidebar.markdown("---")
+
+# --- Lógica de autenticación SIN depuración ---
+grupo_sel = st.sidebar.selectbox("Grupo", ["TODOS"] + opciones_filtros['clientes'])
+
+acceso_permitido = False
+
+if grupo_sel == "TODOS":
+    st.session_state.cliente_autenticado = None
+    acceso_permitido = True
+else:
+    if st.session_state.cliente_autenticado == grupo_sel:
+        st.sidebar.success(f"Acceso verificado para: {grupo_sel}")
+        acceso_permitido = True
+    else:
+        st.sidebar.warning(f"Se requiere un código para acceder a los datos de '{grupo_sel}'.")
+        client_code = st.sidebar.text_input("Código de acceso:", type="password", key=f"password_{grupo_sel}")
+        
+        if st.sidebar.button("Verificar Código", key=f"verify_{grupo_sel}"):
+            try:
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                secrets_path = os.path.join(script_dir, 'streamlitsecrets.toml')
+                
+                if os.path.exists(secrets_path):
+                    all_secrets = toml.load(secrets_path)
+                    client_codes_raw = all_secrets.get('client_codes', {})
+                    client_codes_normalized = {normalize_text(k): v for k, v in client_codes_raw.items()}
+                    grupo_sel_normalized = normalize_text(grupo_sel)
+                    
+                    if client_codes_normalized.get(grupo_sel_normalized) == client_code:
+                        st.session_state.cliente_autenticado = grupo_sel
+                        st.rerun()
+                    else:
+                        st.sidebar.error("Código incorrecto. Acceso denegado.")
+                        st.session_state.cliente_autenticado = None
+                else:
+                    st.sidebar.error("Archivo de códigos ('streamlitsecrets.toml') no encontrado.")
+                    st.session_state.cliente_autenticado = None
+            except Exception as e:
+                st.sidebar.error(f"Error al leer el archivo de códigos: {e}")
+                st.session_state.cliente_autenticado = None
+
 clas_venta_sel = st.sidebar.selectbox("Clasificación de Venta", ["TODOS"] + opciones_filtros['clas_venta'])
 clas_modelo_sel = st.sidebar.selectbox("Clasificación de Modelo", ["TODOS"] + opciones_filtros['clas_modelo'])
 origen_marca_sel = st.sidebar.selectbox("Origen de Marca", ["TODOS"] + opciones_filtros['origen_marca'])
-grupo_sel = st.sidebar.selectbox("Grupo", ["TODOS"] + opciones_filtros['clientes'])
 segmento_sel = st.sidebar.selectbox("Segmento", ["TODOS"] + opciones_filtros['segmentos'])
 combustible_sel = st.sidebar.selectbox("Combustible", ["TODOS"] + opciones_filtros['combustibles'])
 st.sidebar.markdown("---")
@@ -257,7 +319,7 @@ meses_nombres_disponibles = [meses_dict[m] for m in sorted(opciones_filtros['mes
 mes_subasta_sel_nombre = st.sidebar.selectbox("Mes de Subasta", ["TODOS"] + meses_nombres_disponibles)
 mes_subasta_sel = next((k for k, v in meses_dict.items() if v == mes_subasta_sel_nombre), "TODOS")
 
-if st.sidebar.button("Analizar / Estimar"):
+if st.sidebar.button("Analizar / Estimar", disabled=(not acceso_permitido)):
     filtros_activos = {
         'marca': marca_sel, 'modelo': modelo_sel, 'condicion_de_venta': condicion_sel,
         'año': año_sel, 'clasificacion_venta': clas_venta_sel, 'clasificacion_modelo': clas_modelo_sel,
@@ -278,9 +340,179 @@ if st.sidebar.button("Analizar / Estimar"):
         st.rerun()
 
 # --- PESTAÑAS Y VISUALIZACIONES ---
-tab1, tab2, tab3 = st.tabs(["Pronóstico de Resultados", "Análisis Historico", "Evolución de Indicadores"])
+tab1, tab2, tab3 = st.tabs(["Análisis Historico", "Evolución de Indicadores", "Pronóstico de Resultados"])
 
+# --- CONTENIDO DE LA PESTAÑA 1: ANÁLISIS HISTÓRICO ---
 with tab1:
+    if st.session_state.analysis_run:
+        df_filtrado_final = st.session_state.df_filtrado
+        if df_filtrado_final.empty:
+            st.warning("No hay datos para mostrar en el análisis de vehículo.")
+        else:
+            display_historical_analysis(df_filtrado_final)
+            st.markdown('<fieldset class="shiny-fieldset"><legend class="shiny-legend">Gráficas Comparativas</legend>', unsafe_allow_html=True)
+            col1, col2 = st.columns(2)
+            with col1:
+                st.plotly_chart(px.histogram(df_filtrado_final, x='CANTIDAD_OFERTADA', nbins=30, title="1. Distribución de Precio de Venta").update_layout(yaxis_title="Frecuencia", xaxis_title="Precio de Venta"), use_container_width=True)
+                st.plotly_chart(px.histogram(df_filtrado_final, x='AÑO', title="3. Distribución de Año-Modelo").update_layout(yaxis_title="Frecuencia", xaxis_title="Año del Modelo", xaxis={'categoryorder':'total descending'}), use_container_width=True)
+            with col2:
+                st.plotly_chart(px.scatter(df_filtrado_final, x='FECHA_DE_PAGO', y='CANTIDAD_OFERTADA', title="2. Histórico de Precios", hover_data=['MARCA', 'MODELO']).update_layout(xaxis_title="Fecha de Venta", yaxis_title="Precio de Venta"), use_container_width=True)
+                st.plotly_chart(px.scatter(df_filtrado_final, x='DIAS_HABILES_VENTA', y='CANTIDAD_OFERTADA', title="4. Precio de Venta vs. Días para Venta", hover_data=['MARCA', 'MODELO']).update_layout(xaxis_title="Días Hábiles para Venta", yaxis_title="Precio de Venta"), use_container_width=True)
+            st.markdown('</fieldset>', unsafe_allow_html=True)
+            st.markdown('<fieldset class="shiny-fieldset"><legend class="shiny-legend">Análisis de Modelos</legend>', unsafe_allow_html=True)
+            if not df_filtrado_final.empty:
+                st.write("##### Jerarquía de Volumen de Ventas por Marca y Modelo")
+                treemap_data = df_filtrado_final.groupby(['MARCA', 'MODELO']).agg(CANTIDAD=('MODELO', 'size'), PRECIO_PROMEDIO=('CANTIDAD_OFERTADA', 'mean')).reset_index()
+                fig_treemap = px.treemap(treemap_data, path=[px.Constant("Marcas"), 'MARCA', 'MODELO'], values='CANTIDAD', title="Volumen de ventas por marca y modelo", custom_data=['PRECIO_PROMEDIO'])
+                fig_treemap.update_traces(textinfo="label+percent parent", hovertemplate="<b>%{label}</b><br>Cantidad: %{value}<br>Porcentaje de la Marca: %{percentParent:.2%}<br>Porcentaje del Total: %{percentRoot:.2%}<br>Precio Promedio: $%{customdata[0]:,.2f}")
+                st.plotly_chart(fig_treemap.update_layout(margin=dict(t=50, l=25, r=25, b=25), height=700), use_container_width=True)
+                if len(df_filtrado_final['MARCA'].unique()) > 1:
+                    st.write("##### Rango de Precios de Venta por Marca (Puntos por Modelo)")
+                    st.plotly_chart(px.scatter(df_filtrado_final, x='MARCA', y='CANTIDAD_OFERTADA', hover_data=['MODELO', 'VERSION', 'AÑO']).update_layout(xaxis_title=None, yaxis_title="Precio de Venta"), use_container_width=True)
+                st.write("##### Volumen de Venta por Marca y Modelo")
+                volume_table = df_filtrado_final.groupby(['MARCA', 'MODELO']).agg(CANTIDAD_DE_VEHICULOS=('MODELO', 'size'), PRECIO_PROMEDIO_DE_VENTA=('CANTIDAD_OFERTADA', 'mean'), MODA_DEL_PRECIO_DE_VENTA=('CANTIDAD_OFERTADA', lambda x: x.mode().get(0, np.nan)), PRECIO_RESERVA_PROMEDIO=('PRECIO_RESERVA', 'mean'), MODA_PRECIO_RESERVA=('PRECIO_RESERVA', lambda x: x.mode().get(0, np.nan)), RECUPERACION_PRECIO_PROM=('RECUPERACION_PRECIO', 'mean'), RECUPERACION_VALOR_PROM=('RECUPERACION_VALOR', 'mean'), DIAS_HABILES_PROMEDIO=('DIAS_HABILES_VENTA', 'mean')).sort_values(by='CANTIDAD_DE_VEHICULOS', ascending=False).reset_index()
+                volume_table_display = volume_table.copy()
+                volume_table_display.columns = [col.replace('_', ' ').title() for col in volume_table.columns]
+                format_volume = {'Precio Promedio De Venta': '${:,.2f}', 'Moda Del Precio De Venta': '${:,.2f}', 'Precio Reserva Promedio': '${:,.2f}', 'Moda Precio Reserva': '${:,.2f}', 'Recuperacion Precio Prom': '{:.2%}', 'Recuperacion Valor Prom': '{:.2%}', 'Dias Habiles Promedio': '{:.1f}'}
+                st.dataframe(volume_table_display.style.format(format_volume).set_table_styles([{'selector': 'thead th', 'props': [('background-color', '#5C1212'), ('color', 'white')]}]), use_container_width=True)
+            st.markdown('</fieldset>', unsafe_allow_html=True)
+            st.markdown('<fieldset class="shiny-fieldset"><legend class="shiny-legend">Detalle de Datos Históricos</legend>', unsafe_allow_html=True)
+            
+            # --- INICIO DE LA MODIFICACIÓN PARA LA DESCARGA ---
+            columnas_display = ['MARCA', 'MODELO', 'VERSION', 'AÑO', 'CONDICION_DE_VENTA', 'COMBUSTIBLE', 'CANTIDAD_OFERTADA', 'COSTO_CLIENTE', 'PRECIO_DE_MERCADO', 'RECUPERACION_PRECIO', 'RECUPERACION_VALOR', 'FECHA_DE_SUBASTA', 'DIAS_HABILES_VENTA', 'NUMERO_DE_SUBASTAS', 'NUMERO_DE_OFERTAS', 'SEGMENTO']
+            
+            # 1. Preparamos el DF para exportar (TODAS las filas, columnas seleccionadas)
+            df_para_exportar = df_filtrado_final[[col for col in columnas_display if col in df_filtrado_final.columns]].copy()
+            df_para_exportar.columns = [col.replace('_', ' ').title() for col in df_para_exportar.columns]
+
+            # 2. Preparamos el DF para mostrar en pantalla (limitado a 1000 filas)
+            if len(df_para_exportar) > 1000:
+                st.warning(f"⚠️ Se encontraron {len(df_para_exportar)} registros. Mostrando solo los primeros 1000 para mantener el rendimiento.")
+                df_a_mostrar = df_para_exportar.head(1000)
+            else:
+                df_a_mostrar = df_para_exportar
+            
+            format_detalle = {'Cantidad Ofertada': '${:,.2f}', 'Costo Cliente': '${:,.2f}', 'Precio De Mercado': '${:,.2f}', 'Recuperacion Precio': '{:.2%}', 'Recuperacion Valor': '{:.2%}', 'Fecha De Subasta': '{:%Y-%m-%d}', 'Año': '{:.0f}'}
+            st.dataframe(df_a_mostrar.style.format(format_detalle).set_table_styles([{'selector': 'thead th', 'props': [('background-color', '#5C1212'), ('color', 'white')]}]), use_container_width=True)
+            
+            # 3. El botón de descarga usa el DF completo preparado para exportar
+            df_excel = to_excel(df_para_exportar)
+            st.download_button(
+               label="📥 Descargar Datos como Excel",
+               data=df_excel,
+               file_name='detalle_datos_historicos.xlsx',
+               mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            )
+            # --- FIN DE LA MODIFICACIÓN ---
+
+            st.markdown('</fieldset>', unsafe_allow_html=True)
+    else:
+        st.info("Selecciona filtros y ejecuta el análisis para ver los detalles del vehículo.")
+
+# --- CONTENIDO DE LA PESTAÑA 2: EVOLUCIÓN DE INDICADORES ---
+with tab2:
+    if st.session_state.analysis_run:
+        df_hist = st.session_state.df_filtrado
+        if df_hist.empty:
+            st.warning("No hay datos para mostrar con los filtros seleccionados.")
+        else:
+            df_hist['MES_AÑO_SUBASTA'] = df_hist['FECHA_DE_SUBASTA'].dt.to_period('M').dt.to_timestamp()
+            cols_to_analyze = {
+                'CANTIDAD_OFERTADA': 'Precio de Venta',
+                'PRECIO_RESERVA': 'Precio de Reserva',
+                'COSTO_CLIENTE': 'Costo Cliente',
+                'PRECIO_DE_MERCADO': 'Valor de Mercado',
+                'DIAS_HABILES_VENTA': 'Días de Venta',
+                'NUMERO_DE_OFERTAS': 'Número de Ofertas',
+                'RECUPERACION_PRECIO': 'Recuperación de Venta',
+                'RECUPERACION_VALOR': 'Recuperación de Mercado'
+            }
+            try:
+                with st.spinner("Calculando tendencias históricas..."):
+                    df_counts = df_hist.groupby('MES_AÑO_SUBASTA').size().reset_index(name='CONTEO')
+                    fig_counts = px.bar(
+                        df_counts,
+                        x='MES_AÑO_SUBASTA',
+                        y='CONTEO',
+                        title="Ventas Totales por Mes",
+                        text='CONTEO'
+                    )
+                    fig_counts.update_traces(
+                        textposition='inside',
+                        insidetextanchor='middle',
+                        textfont=dict(color='white', family='Arial', size=12),
+                        marker_color='#5C1212'
+                    )
+                    fig_counts.update_layout(
+                        yaxis_title="Número de Vehículos Vendidos",
+                        xaxis_title="Mes de Subasta",
+                        yaxis=dict(showgrid=False)
+                    )
+                    st.plotly_chart(fig_counts, use_container_width=True)
+                    st.markdown("---")
+
+                    df_evolucion = df_hist.groupby('MES_AÑO_SUBASTA').agg(
+                        **{f'{col}_mean': (col, 'mean') for col in cols_to_analyze.keys()},
+                        **{f'{col}_mode': (col, lambda x: x.mode().get(0, np.nan)) for col in cols_to_analyze.keys()}
+                    ).reset_index()
+
+                    for col, title in cols_to_analyze.items():
+                        st.markdown(f"### {title}")
+                        fig = go.Figure()
+
+                        etiquetas = []
+                        for v in df_evolucion[f'{col}_mean']:
+                            if pd.isnull(v):
+                                etiquetas.append('')
+                            elif 'RECUPERACION' in col:
+                                etiquetas.append(f"{v*100:.1f}%")
+                            elif 'DIAS' in col or 'NUMERO' in col:
+                                etiquetas.append(f"{int(v)}")
+                            elif 'PRECIO' in col or 'CANTIDAD' in col or 'COSTO' in col or 'VALOR' in col:
+                                etiquetas.append(f"${int(v):,}")
+                            else:
+                                etiquetas.append(f"{v:.2f}")
+
+                        fig.add_trace(go.Scatter(
+                            x=df_evolucion['MES_AÑO_SUBASTA'],
+                            y=df_evolucion[f'{col}_mean'],
+                            mode='lines+markers+text',
+                            name='Promedio',
+                            line=dict(color='#5C1212'),
+                            text=etiquetas,
+                            textposition='top center',
+                            textfont=dict(color='black', family='Arial', size=12),
+                            marker=dict(color='#5C1212')
+                        ))
+
+                        fig.add_trace(go.Scatter(
+                            x=df_evolucion['MES_AÑO_SUBASTA'],
+                            y=df_evolucion[f'{col}_mode'],
+                            mode='lines+markers',
+                            name='Moda',
+                            line=dict(color='#C87E7E', dash='dash')
+                        ))
+
+                        fig.update_layout(
+                            title=f"Evolución Mensual del Promedio y Moda de {title}",
+                            xaxis_title="Mes de Subasta",
+                            yaxis_title="Valor",
+                            legend_title="Métrica",
+                            yaxis=dict(showgrid=False)
+                        )
+                        if 'PRECIO' in col or 'CANTIDAD' in col or 'COSTO' in col or 'VALOR' in col and 'RECUPERACION' not in col:
+                            fig.update_layout(yaxis_tickprefix='$', yaxis_tickformat=',.0f')
+                        if 'RECUPERACION' in col:
+                            fig.update_layout(yaxis_tickformat='.1%')
+                        st.plotly_chart(fig, use_container_width=True)
+                        st.markdown("---")
+            except Exception as e:
+                st.error(f"Ocurrió un error al generar los gráficos de evolución: {e}")
+    else:
+        st.info("Selecciona filtros y ejecuta el análisis para ver la evolución histórica.")
+
+# --- CONTENIDO DE LA PESTAÑA 3: PRONÓSTICO DE RESULTADOS ---
+with tab3:
     if st.session_state.analysis_run:
         df_filtrado = st.session_state.df_filtrado
         if df_filtrado.empty:
@@ -349,15 +581,39 @@ with tab1:
             pred_recuperacion = modelo_recuperacion.predict(df_para_predecir)[0]
             pred_ofertas = modelo_ofertas.predict(df_para_predecir)[0]
             
+            min_precio = pred_precio * 0.85
+            min_dias = pred_dias * 0.85
+            min_recuperacion = pred_recuperacion * 0.85
+            min_ofertas = pred_ofertas * 0.85
+
             p1, p2, p3, p4 = st.columns(4)
-            with p1: st.markdown(f'<div class="metric-box highlight"><h4>Precio de Venta Estimado</h4><p>${pred_precio:,.2f}</p></div>', unsafe_allow_html=True)
-            with p2: st.markdown(f'<div class="metric-box highlight"><h4>Días de Venta Estimados</h4><p>{pred_dias:.1f}</p></div>', unsafe_allow_html=True)
-            with p3: st.markdown(f'<div class="metric-box highlight"><h4>Recuperación Estimada</h4><p>{pred_recuperacion:.2%}</p></div>', unsafe_allow_html=True)
-            with p4: st.markdown(f'<div class="metric-box highlight"><h4># Ofertas Estimadas</h4><p>{pred_ofertas:.1f}</p></div>', unsafe_allow_html=True)
+            with p1: 
+                st.markdown(f'''<div class="metric-box highlight">
+                                <h4>Precio de Venta Estimado</h4>
+                                <p class="compound-text"><span class="compound-label">Mínimo:</span>${min_precio:,.2f}</p>
+                                <p class="compound-text"><span class="compound-label">Pronóstico:</span>${pred_precio:,.2f}</p>
+                            </div>''', unsafe_allow_html=True)
+            with p2: 
+                st.markdown(f'''<div class="metric-box highlight">
+                                <h4>Días de Venta Estimados</h4>
+                                <p class="compound-text"><span class="compound-label">Mínimo:</span>{min_dias:.0f}</p>
+                                <p class="compound-text"><span class="compound-label">Pronóstico:</span>{pred_dias:.0f}</p>
+                            </div>''', unsafe_allow_html=True)
+            with p3: 
+                st.markdown(f'''<div class="metric-box highlight">
+                                <h4>Recuperación Estimada</h4>
+                                <p class="compound-text"><span class="compound-label">Mínimo:</span>{min_recuperacion:.1%}</p>
+                                <p class="compound-text"><span class="compound-label">Pronóstico:</span>{pred_recuperacion:.1%}</p>
+                            </div>''', unsafe_allow_html=True)
+            with p4: 
+                st.markdown(f'''<div class="metric-box highlight">
+                                <h4># Ofertas Estimadas</h4>
+                                <p class="compound-text"><span class="compound-label">Mínimo:</span>{min_ofertas:.0f}</p>
+                                <p class="compound-text"><span class="compound-label">Pronóstico:</span>{pred_ofertas:.0f}</p>
+                            </div>''', unsafe_allow_html=True)
+
             st.markdown('</fieldset>', unsafe_allow_html=True)
             
-            st.markdown(f"<h3 style='text-align: center; margin-top: 20px;'>Resultados para la Selección</h3>", unsafe_allow_html=True)
-            display_historical_analysis(df_filtrado)
             st.markdown('<fieldset class="shiny-fieldset"><legend class="shiny-legend">Visualización Comparativa de la Estimación</legend>', unsafe_allow_html=True)
             v_tab1, v_tab2, v_tab3, v_tab4 = st.tabs(["Precio de Venta", "Días de Venta", "% Recuperación", "# Ofertas"])
             with v_tab1: generate_comparison_plots(df_filtrado, 'CANTIDAD_OFERTADA', pred_precio, modelo_precio, df_para_predecir, "Precio de Venta", "${:,.2f}")
@@ -413,99 +669,10 @@ with tab1:
                         fig_dist.add_trace(go.Histogram(x=temp_df[pred_col], name='Valores Predichos', opacity=0.75))
                         fig_dist.update_layout(barmode='overlay', title_text=f'Distribución Comparativa para {title}', xaxis_title_text='Valor', yaxis_title_text='Frecuencia')
                         st.plotly_chart(fig_dist, use_container_width=True)
-                        st.markdown("---")
-                        temp_df['RESIDUOS'] = temp_df[true_col] - temp_df[pred_col]
-                        fig_res = px.histogram(temp_df, x='RESIDUOS', marginal="box", title=f'Distribución de Residuos (Errores) para {title}')
-                        fig_res.add_vline(x=0, line_width=2, line_dash="dash", line_color="red")
-                        st.plotly_chart(fig_res.update_layout(xaxis_title_text='Error de Predicción (Real - Predicho)', yaxis_title_text='Frecuencia'), use_container_width=True)
-
+                        
                 show_metrics_and_plot(m_tab1, 'CANTIDAD_OFERTADA', 'PRED_PRECIO', 'Precio de Venta', "${:,.2f}", "${:,.2f}")
                 show_metrics_and_plot(m_tab2, 'DIAS_HABILES_VENTA', 'PRED_DIAS', 'Días de Venta', "{:.1f} días", "{:.1f} días")
                 show_metrics_and_plot(m_tab3, 'RECUPERACION_PRECIO', 'PRED_RECUPERACION', '% Recuperación', "{:.2%}", "{:.2%}")
                 show_metrics_and_plot(m_tab4, 'NUMERO_DE_OFERTAS', 'PRED_OFERTAS', '# de Ofertas', "{:.1f}", "{:.1f}")
     else:
         st.info("Utiliza los filtros de la barra lateral y presiona 'Analizar / Estimar' para ver los resultados.")
-
-with tab2:
-    if st.session_state.analysis_run:
-        df_filtrado_final = st.session_state.df_filtrado
-        if df_filtrado_final.empty:
-            st.warning("No hay datos para mostrar en el análisis de vehículo.")
-        else:
-            display_historical_analysis(df_filtrado_final)
-            st.markdown('<fieldset class="shiny-fieldset"><legend class="shiny-legend">Gráficas Comparativas</legend>', unsafe_allow_html=True)
-            col1, col2 = st.columns(2)
-            with col1:
-                st.plotly_chart(px.histogram(df_filtrado_final, x='CANTIDAD_OFERTADA', nbins=30, title="1. Distribución de Precio de Venta").update_layout(yaxis_title="Frecuencia", xaxis_title="Precio de Venta"), use_container_width=True)
-                st.plotly_chart(px.histogram(df_filtrado_final, x='AÑO', title="3. Distribución de Año-Modelo").update_layout(yaxis_title="Frecuencia", xaxis_title="Año del Modelo", xaxis={'categoryorder':'total descending'}), use_container_width=True)
-            with col2:
-                st.plotly_chart(px.scatter(df_filtrado_final, x='FECHA_DE_PAGO', y='CANTIDAD_OFERTADA', title="2. Histórico de Precios", hover_data=['MARCA', 'MODELO']).update_layout(xaxis_title="Fecha de Venta", yaxis_title="Precio de Venta"), use_container_width=True)
-                st.plotly_chart(px.scatter(df_filtrado_final, x='DIAS_HABILES_VENTA', y='CANTIDAD_OFERTADA', title="4. Precio de Venta vs. Días para Venta", hover_data=['MARCA', 'MODELO']).update_layout(xaxis_title="Días Hábiles para Venta", yaxis_title="Precio de Venta"), use_container_width=True)
-            st.markdown('</fieldset>', unsafe_allow_html=True)
-            st.markdown('<fieldset class="shiny-fieldset"><legend class="shiny-legend">Análisis de Modelos</legend>', unsafe_allow_html=True)
-            if not df_filtrado_final.empty:
-                st.write("##### Jerarquía de Volumen de Ventas por Marca y Modelo")
-                treemap_data = df_filtrado_final.groupby(['MARCA', 'MODELO']).agg(CANTIDAD=('MODELO', 'size'), PRECIO_PROMEDIO=('CANTIDAD_OFERTADA', 'mean')).reset_index()
-                fig_treemap = px.treemap(treemap_data, path=[px.Constant("Marcas"), 'MARCA', 'MODELO'], values='CANTIDAD', title="Volumen de ventas por marca y modelo", custom_data=['PRECIO_PROMEDIO'])
-                fig_treemap.update_traces(textinfo="label+percent parent", hovertemplate="<b>%{label}</b><br>Cantidad: %{value}<br>Porcentaje de la Marca: %{percentParent:.2%}<br>Porcentaje del Total: %{percentRoot:.2%}<br>Precio Promedio: $%{customdata[0]:,.2f}")
-                st.plotly_chart(fig_treemap.update_layout(margin=dict(t=50, l=25, r=25, b=25), height=700), use_container_width=True)
-                if len(df_filtrado_final['MARCA'].unique()) > 1:
-                    st.write("##### Rango de Precios de Venta por Marca (Puntos por Modelo)")
-                    st.plotly_chart(px.scatter(df_filtrado_final, x='MARCA', y='CANTIDAD_OFERTADA', hover_data=['MODELO', 'VERSION', 'AÑO']).update_layout(xaxis_title=None, yaxis_title="Precio de Venta"), use_container_width=True)
-                st.write("##### Volumen de Venta por Marca y Modelo")
-                volume_table = df_filtrado_final.groupby(['MARCA', 'MODELO']).agg(CANTIDAD_DE_VEHICULOS=('MODELO', 'size'), PRECIO_PROMEDIO_DE_VENTA=('CANTIDAD_OFERTADA', 'mean'), MODA_DEL_PRECIO_DE_VENTA=('CANTIDAD_OFERTADA', lambda x: x.mode().get(0, np.nan)), PRECIO_RESERVA_PROMEDIO=('PRECIO_RESERVA', 'mean'), MODA_PRECIO_RESERVA=('PRECIO_RESERVA', lambda x: x.mode().get(0, np.nan)), RECUPERACION_PRECIO_PROM=('RECUPERACION_PRECIO', 'mean'), RECUPERACION_VALOR_PROM=('RECUPERACION_VALOR', 'mean'), DIAS_HABILES_PROMEDIO=('DIAS_HABILES_VENTA', 'mean')).sort_values(by='CANTIDAD_DE_VEHICULOS', ascending=False).reset_index()
-                volume_table_display = volume_table.copy()
-                volume_table_display.columns = [col.replace('_', ' ').title() for col in volume_table.columns]
-                format_volume = {'Precio Promedio De Venta': '${:,.2f}', 'Moda Del Precio De Venta': '${:,.2f}', 'Precio Reserva Promedio': '${:,.2f}', 'Moda Precio Reserva': '${:,.2f}', 'Recuperacion Precio Prom': '{:.2%}', 'Recuperacion Valor Prom': '{:.2%}', 'Dias Habiles Promedio': '{:.1f}'}
-                st.dataframe(volume_table_display.style.format(format_volume).set_table_styles([{'selector': 'thead th', 'props': [('background-color', '#5C1212'), ('color', 'white')]}]), use_container_width=True)
-            st.markdown('</fieldset>', unsafe_allow_html=True)
-            st.markdown('<fieldset class="shiny-fieldset"><legend class="shiny-legend">Detalle de Datos Históricos</legend>', unsafe_allow_html=True)
-            columnas_display = ['MARCA', 'MODELO', 'VERSION', 'AÑO', 'CONDICION_DE_VENTA', 'COMBUSTIBLE', 'CANTIDAD_OFERTADA', 'COSTO_CLIENTE', 'PRECIO_DE_MERCADO', 'RECUPERACION_PRECIO', 'RECUPERACION_VALOR', 'FECHA_DE_SUBASTA', 'DIAS_HABILES_VENTA', 'NUMERO_DE_SUBASTAS', 'NUMERO_DE_OFERTAS', 'GRUPO', 'SEGMENTO']
-            detalle_df_display = df_filtrado_final[[col for col in columnas_display if col in df_filtrado_final.columns]].copy()
-
-            # --- CORRECCIÓN PARA TABLA GIGANTE ---
-            if len(detalle_df_display) > 1000:
-                st.warning(f"⚠️ Se encontraron {len(detalle_df_display)} registros. Mostrando solo los primeros 1000 para mantener el rendimiento.")
-                df_a_mostrar = detalle_df_display.head(1000)
-            else:
-                df_a_mostrar = detalle_df_display
-            
-            df_a_mostrar.columns = [col.replace('_', ' ').title() for col in df_a_mostrar.columns]
-            format_detalle = {'Cantidad Ofertada': '${:,.2f}', 'Costo Cliente': '${:,.2f}', 'Precio De Mercado': '${:,.2f}', 'Recuperacion Precio': '{:.2%}', 'Recuperacion Valor': '{:.2%}', 'Fecha De Subasta': '{:%Y-%m-%d}', 'Año': '{:.0f}'}
-            st.dataframe(df_a_mostrar.style.format(format_detalle).set_table_styles([{'selector': 'thead th', 'props': [('background-color', '#5C1212'), ('color', 'white')]}]), use_container_width=True)
-            st.markdown('</fieldset>', unsafe_allow_html=True)
-    else:
-        st.info("Selecciona filtros y ejecuta el análisis para ver los detalles del vehículo.")
-
-with tab3:
-    if st.session_state.analysis_run:
-        df_hist = st.session_state.df_filtrado
-        if df_hist.empty:
-            st.warning("No hay datos para mostrar con los filtros seleccionados.")
-        else:
-            st.markdown("## Evolución Histórica de Comportamiento")
-            st.info("Esta página muestra la evolución mensual del promedio y la moda para los datos filtrados.")
-            df_hist['MES_AÑO_SUBASTA'] = df_hist['FECHA_DE_SUBASTA'].dt.to_period('M').dt.to_timestamp()
-            cols_to_analyze = {'CANTIDAD_OFERTADA': 'Precio de Venta', 'PRECIO_RESERVA': 'Precio de Reserva', 'COSTO_CLIENTE': 'Costo Cliente', 'PRECIO_DE_MERCADO': 'Valor de Mercado', 'DIAS_HABILES_VENTA': 'Días de Venta', 'NUMERO_DE_OFERTAS': 'Número de Ofertas', 'RECUPERACION_PRECIO': 'Recuperación de Venta', 'RECUPERACION_VALOR': 'Recuperación de Mercado'}
-            try:
-                with st.spinner("Calculando tendencias históricas..."):
-                    st.markdown("### Ventas Totales por Mes (Según Filtros)")
-                    df_counts = df_hist.groupby('MES_AÑO_SUBASTA').size().reset_index(name='CONTEO')
-                    fig_counts = px.bar(df_counts, x='MES_AÑO_SUBASTA', y='CONTEO', title="Ventas Totales por Mes")
-                    st.plotly_chart(fig_counts.update_layout(yaxis_title="Número de Vehículos Vendidos", xaxis_title="Mes de Subasta"), use_container_width=True)
-                    st.markdown("---")
-                    df_evolucion = df_hist.groupby('MES_AÑO_SUBASTA').agg(**{f'{col}_mean': (col, 'mean') for col in cols_to_analyze.keys()}, **{f'{col}_mode': (col, lambda x: x.mode().get(0, np.nan)) for col in cols_to_analyze.keys()}).reset_index()
-                    for col, title in cols_to_analyze.items():
-                        st.markdown(f"### {title}")
-                        fig = go.Figure()
-                        fig.add_trace(go.Scatter(x=df_evolucion['MES_AÑO_SUBASTA'], y=df_evolucion[f'{col}_mean'], mode='lines+markers', name='Promedio', line=dict(color='#5C1212')))
-                        fig.add_trace(go.Scatter(x=df_evolucion['MES_AÑO_SUBASTA'], y=df_evolucion[f'{col}_mode'], mode='lines+markers', name='Moda', line=dict(color='#C87E7E', dash='dash')))
-                        fig.update_layout(title=f"Evolución Mensual del Promedio y Moda de {title}", xaxis_title="Mes de Subasta", yaxis_title="Valor", legend_title="Métrica")
-                        if 'PRECIO' in col or 'CANTIDAD' in col or 'COSTO' in col or 'VALOR' in col and 'RECUPERACION' not in col: fig.update_layout(yaxis_tickprefix='$', yaxis_tickformat=',.2f')
-                        if 'RECUPERACION' in col: fig.update_layout(yaxis_tickformat='.0%')
-                        st.plotly_chart(fig, use_container_width=True)
-                        st.markdown("---")
-            except Exception as e:
-                st.error(f"Ocurrió un error al generar los gráficos de evolución: {e}")
-    else:
-        st.info("Selecciona filtros y ejecuta el análisis para ver la evolución histórica.")
