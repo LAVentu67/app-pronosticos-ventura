@@ -10,4 +10,5 @@ toml
 psycopg2-binary
 pyarrow
 openpyxl
-requests 
+requests
+category-encoders
