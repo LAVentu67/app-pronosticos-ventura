@@ -208,17 +208,59 @@ def generate_comparison_plots(_dataframe, real_col, pred_value, _pipeline, _inst
 @st.cache_resource
 def cargar_recursos_iniciales():
     try:
-    client_codes_raw = st.secrets.get("client_codes", {})
-    client_codes_normalized = {normalize_text(k): v for k, v in client_codes_raw.items()}
-    grupo_sel_normalized = normalize_text(grupo_sel)
-    if client_codes_normalized.get(grupo_sel_normalized) == client_code:
-        st.session_state.cliente_autenticado = grupo_sel
-        st.rerun()
-    else:
-        st.sidebar.error("Código incorrecto. Acceso denegado.")
-        st.session_state.cliente_autenticado = None
-except Exception as e:
-    st.sidebar.error(f"Error al leer los secretos: {e}")
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        def get_path(filename):
+            return os.path.join(script_dir, filename)
+
+        with st.spinner("Cargando configuración y filtros... 📊"):
+            feature_cols = joblib.load(get_path('feature_cols.joblib'))
+            historical_stats = pd.read_parquet(get_path('historical_stats.parquet'))
+            opciones_filtros = joblib.load(get_path('opciones_filtros.joblib'))
+
+        with st.spinner("Estableciendo conexión con la base de datos... ☁️"):
+            DATABASE_URL = st.secrets["postgres"]["db_url"]
+            engine = create_engine(DATABASE_URL)
+
+        return historical_stats, feature_cols, engine, opciones_filtros
+
+    except Exception as e:
+        st.error(f"Error crítico al cargar recursos iniciales: {e}")
+        return None, None, None, None
+
+
+@st.cache_resource
+def cargar_modelos():
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        def get_path(filename):
+            return os.path.join(script_dir, filename)
+
+        with st.spinner("Cargando modelos de machine learning... 🤖"):
+            modelo_precio = joblib.load(get_path('modelo_precio.joblib'))
+            modelo_dias = joblib.load(get_path('modelo_dias.joblib'))
+            modelo_recuperacion = joblib.load(get_path('modelo_recuperacion.joblib'))
+            modelo_ofertas = joblib.load(get_path('modelo_ofertas.joblib'))
+
+        return modelo_precio, modelo_dias, modelo_recuperacion, modelo_ofertas
+
+    except Exception as e:
+        st.error(f"Error al cargar modelos: {e}")
+        return None, None, None, None
+
+
+# --- Carga de Recursos Iniciales ---
+recursos_iniciales = cargar_recursos_iniciales()
+if any(res is None for res in recursos_iniciales):
+    st.error("La aplicación no pudo cargar su configuración inicial.")
+    st.stop()
+historical_stats, feature_cols, engine, opciones_filtros = recursos_iniciales
+
+# --- INICIALIZAR SESSION STATE ---
+if 'analysis_run' not in st.session_state:
+    st.session_state.analysis_run = False
+if 'df_filtrado' not in st.session_state:
+    st.session_state.df_filtrado = pd.DataFrame()
+if 'cliente_autenticado' not in st.session_state:
     st.session_state.cliente_autenticado = None
 
 # --- INTERFAZ DE USUARIO (SIDEBAR) ---
