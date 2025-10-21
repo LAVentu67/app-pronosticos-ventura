@@ -205,6 +205,49 @@ def generate_comparison_plots(_dataframe, real_col, pred_value, _pipeline, _inst
                 st.plotly_chart(fig_dots.update_layout(title=f"Promedio de {title} por Año", height=400, margin=dict(t=40, b=10, l=10, r=10), xaxis_title="Año del Modelo"), use_container_width=True)
             except Exception: st.warning("No se pudo generar el gráfico de promedios por año.")
 
+@st.cache_resource
+def cargar_recursos_iniciales():
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        def get_path(filename):
+            return os.path.join(script_dir, filename)
+
+        with st.spinner("Cargando configuración y filtros... 📊"):
+            feature_cols = joblib.load(get_path('feature_cols.joblib'))
+            historical_stats = pd.read_parquet(get_path('historical_stats.parquet'))
+            opciones_filtros = joblib.load(get_path('opciones_filtros.joblib'))
+
+        with st.spinner("Estableciendo conexión con la base de datos... ☁️"):
+            DATABASE_URL = st.secrets["postgres"]["db_url"]
+            engine = create_engine(DATABASE_URL)
+
+        return historical_stats, feature_cols, engine, opciones_filtros
+
+    except Exception as e:
+        st.error(f"Error crítico al cargar recursos iniciales: {e}")
+        return None, None, None, None
+
+
+@st.cache_resource
+def cargar_modelos():
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        def get_path(filename):
+            return os.path.join(script_dir, filename)
+
+        with st.spinner("Cargando modelos de machine learning... 🤖"):
+            modelo_precio = joblib.load(get_path('modelo_precio.joblib'))
+            modelo_dias = joblib.load(get_path('modelo_dias.joblib'))
+            modelo_recuperacion = joblib.load(get_path('modelo_recuperacion.joblib'))
+            modelo_ofertas = joblib.load(get_path('modelo_ofertas.joblib'))
+
+        return modelo_precio, modelo_dias, modelo_recuperacion, modelo_ofertas
+
+    except Exception as e:
+        st.error(f"Error al cargar modelos: {e}")
+        return None, None, None, None
+
+
 # --- Carga de Recursos Iniciales ---
 recursos_iniciales = cargar_recursos_iniciales()
 if any(res is None for res in recursos_iniciales):
@@ -649,46 +692,3 @@ with tab3:
                 show_metrics_and_plot(m_tab4, 'NUMERO_DE_OFERTAS', 'PRED_OFERTAS', '# de Ofertas', "{:.1f}", "{:.1f}")
     else:
         st.info("Utiliza los filtros de la barra lateral y presiona 'Analizar / Estimar' para ver los resultados.")
-
-
-@st.cache_resource
-def cargar_recursos_iniciales():
-    try:
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        def get_path(filename):
-            return os.path.join(script_dir, filename)
-
-        with st.spinner("Cargando configuración y filtros... 📊"):
-            feature_cols = joblib.load(get_path('feature_cols.joblib'))
-            historical_stats = pd.read_parquet(get_path('historical_stats.parquet'))
-            opciones_filtros = joblib.load(get_path('opciones_filtros.joblib'))
-
-        with st.spinner("Estableciendo conexión con la base de datos... ☁️"):
-            DATABASE_URL = st.secrets["postgres"]["db_url"]
-            engine = create_engine(DATABASE_URL)
-
-        return historical_stats, feature_cols, engine, opciones_filtros
-
-    except Exception as e:
-        st.error(f"Error crítico al cargar recursos iniciales: {e}")
-        return None, None, None, None
-
-
-@st.cache_resource
-def cargar_modelos():
-    try:
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        def get_path(filename):
-            return os.path.join(script_dir, filename)
-
-        with st.spinner("Cargando modelos de machine learning... 🤖"):
-            modelo_precio = joblib.load(get_path('modelo_precio.joblib'))
-            modelo_dias = joblib.load(get_path('modelo_dias.joblib'))
-            modelo_recuperacion = joblib.load(get_path('modelo_recuperacion.joblib'))
-            modelo_ofertas = joblib.load(get_path('modelo_ofertas.joblib'))
-
-        return modelo_precio, modelo_dias, modelo_recuperacion, modelo_ofertas
-
-    except Exception as e:
-        st.error(f"Error al cargar modelos: {e}")
-        return None, None, None, None
