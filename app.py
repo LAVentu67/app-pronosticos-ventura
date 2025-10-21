@@ -300,18 +300,21 @@ else:
         
         if st.sidebar.button("Verificar Código", key=f"verify_{grupo_sel}"):
             try:
-    client_codes_raw = st.secrets.get("client_codes", {})
-    client_codes_normalized = {normalize_text(k): v for k, v in client_codes_raw.items()}
-    grupo_sel_normalized = normalize_text(grupo_sel)
-    if client_codes_normalized.get(grupo_sel_normalized) == client_code:
-        st.session_state.cliente_autenticado = grupo_sel
-        st.rerun()
-    else:
-        st.sidebar.error("Código incorrecto. Acceso denegado.")
-        st.session_state.cliente_autenticado = None
-except Exception as e:
-    st.sidebar.error(f"Error al leer los secretos: {e}")
-    st.session_state.cliente_autenticado = None
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                secrets_path = os.path.join(script_dir, 'streamlitsecrets.toml')
+                
+                if os.path.exists(secrets_path):
+                    all_secrets = toml.load(secrets_path)
+                    client_codes_raw = all_secrets.get('client_codes', {})
+                    client_codes_normalized = {normalize_text(k): v for k, v in client_codes_raw.items()}
+                    grupo_sel_normalized = normalize_text(grupo_sel)
+                    
+                    if client_codes_normalized.get(grupo_sel_normalized) == client_code:
+                        st.session_state.cliente_autenticado = grupo_sel
+                        st.rerun()
+                    else:
+                        st.sidebar.error("Código incorrecto. Acceso denegado.")
+                        st.session_state.cliente_autenticado = None
                 else:
                     st.sidebar.error("Archivo de códigos ('streamlitsecrets.toml') no encontrado.")
                     st.session_state.cliente_autenticado = None
