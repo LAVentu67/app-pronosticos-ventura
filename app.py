@@ -305,9 +305,9 @@ else:
                 
                 if os.path.exists(secrets_path):
                     all_secrets = toml.load(secrets_path)
-                    client_codes_raw = all_secrets.get('client_codes', {})
-                    client_codes_normalized = {normalize_text(k): v for k, v in client_codes_raw.items()}
-                    grupo_sel_normalized = normalize_text(grupo_sel)
+                client_codes_raw = st.secrets.get("client_codes", {})
+                client_codes_normalized = {normalize_text(k): v for k, v in client_codes_raw.items()}
+                grupo_sel_normalized = normalize_text(grupo_sel)
                     
                     if client_codes_normalized.get(grupo_sel_normalized) == client_code:
                         st.session_state.cliente_autenticado = grupo_sel
