@@ -282,7 +282,7 @@ condicion_sel = st.sidebar.selectbox("Condición de Venta", ["TODOS"] + opciones
 año_sel = st.sidebar.selectbox("Año del Modelo", ["TODOS"] + opciones_filtros['anios'])
 st.sidebar.markdown("---")
 
-# --- Lógica de autenticación SIN depuración ---
+# --- Lógica de autenticación con secrets.toml de Streamlit ---
 grupo_sel = st.sidebar.selectbox("Grupo", ["TODOS"] + opciones_filtros['clientes'])
 
 acceso_permitido = False
@@ -291,36 +291,31 @@ if grupo_sel == "TODOS":
     st.session_state.cliente_autenticado = None
     acceso_permitido = True
 else:
-    if st.session_state.cliente_autenticado == grupo_sel:
+    if st.session_state.get("cliente_autenticado") == grupo_sel:
         st.sidebar.success(f"Acceso verificado para: {grupo_sel}")
         acceso_permitido = True
     else:
         st.sidebar.warning(f"Se requiere un código para acceder a los datos de '{grupo_sel}'.")
         client_code = st.sidebar.text_input("Código de acceso:", type="password", key=f"password_{grupo_sel}")
-        
+
         if st.sidebar.button("Verificar Código", key=f"verify_{grupo_sel}"):
             try:
-                script_dir = os.path.dirname(os.path.abspath(__file__))
-                secrets_path = os.path.join(script_dir, 'streamlitsecrets.toml')
-                
-                if os.path.exists(secrets_path):
-                    all_secrets = toml.load(secrets_path)
+                # Cargar los códigos de acceso desde secrets.toml
                 client_codes_raw = st.secrets.get("client_codes", {})
                 client_codes_normalized = {normalize_text(k): v for k, v in client_codes_raw.items()}
                 grupo_sel_normalized = normalize_text(grupo_sel)
-                    
-                    if client_codes_normalized.get(grupo_sel_normalized) == client_code:
-                        st.session_state.cliente_autenticado = grupo_sel
-                        st.rerun()
-                    else:
-                        st.sidebar.error("Código incorrecto. Acceso denegado.")
-                        st.session_state.cliente_autenticado = None
+
+                if client_codes_normalized.get(grupo_sel_normalized) == client_code:
+                    st.session_state.cliente_autenticado = grupo_sel
+                    st.rerun()
                 else:
-                    st.sidebar.error("Archivo de códigos ('streamlitsecrets.toml') no encontrado.")
+                    st.sidebar.error("Código incorrecto. Acceso denegado.")
                     st.session_state.cliente_autenticado = None
+
             except Exception as e:
-                st.sidebar.error(f"Error al leer el archivo de códigos: {e}")
+                st.sidebar.error(f"Error al leer los códigos de acceso: {e}")
                 st.session_state.cliente_autenticado = None
+
 
 clas_venta_sel = st.sidebar.selectbox("Clasificación de Venta", ["TODOS"] + opciones_filtros['clas_venta'])
 clas_modelo_sel = st.sidebar.selectbox("Clasificación de Modelo", ["TODOS"] + opciones_filtros['clas_modelo'])
