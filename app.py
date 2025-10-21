@@ -71,10 +71,14 @@ def normalize_text(text):
     except:
         return text
 # --- ¡NUEVA FUNCIÓN PARA DESCARGAR ARCHIVOS! ---
+
     
 # --- FUNCIONES OPTIMIZADAS ---
 
+
 # --- FUNCIONES OPTIMIZADAS (MODIFICADAS) ---
+
+
 
 
 @st.cache_data(ttl="1h")
