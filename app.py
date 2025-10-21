@@ -71,10 +71,23 @@ def normalize_text(text):
     except:
         return text
 # --- ¡NUEVA FUNCIÓN PARA DESCARGAR ARCHIVOS! ---
+def download_file_from_github(file_name, repo_url="LAVentu67/app-pronosticos-ventura", tag="v1.0.0-models"):
+    """Descarga un archivo desde una release de GitHub."""
+    url = f"https://github.com/{repo_url}/releases/download/{tag}/{file_name}"
+    try:
+        response = requests.get(url, stream=True)
+        response.raise_for_status()  # Lanza un error si la descarga falla
+        return response.content
+    except requests.exceptions.RequestException as e:
+        st.error(f"Error descargando el archivo '{file_name}': {e}. Verifica la URL del repositorio, el tag y el nombre del archivo en la release.")
+        return None
     
 # --- FUNCIONES OPTIMIZADAS ---
 
+
 # --- FUNCIONES OPTIMIZADAS (MODIFICADAS) ---
+
+
 
 
 @st.cache_data(ttl="1h")
@@ -646,11 +659,11 @@ with tab3:
     else:
         st.info("Utiliza los filtros de la barra lateral y presiona 'Analizar / Estimar' para ver los resultados.")
 
-
 @st.cache_resource
 def cargar_recursos_iniciales():
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__))
+
         def get_path(filename):
             return os.path.join(script_dir, filename)
 
