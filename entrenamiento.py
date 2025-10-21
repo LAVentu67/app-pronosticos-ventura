@@ -292,10 +292,10 @@ def entrenar_y_guardar_modelos(df_full):
     for col in columnas_categoricas_target + columnas_categoricas_onehot:
         if col in X.columns: X.loc[:, col] = X[col].astype(str).fillna('N/A')
 
-    modelo_precio = Pipeline(steps=[('preprocesador', preprocesador),('regresor', RandomForestRegressor(n_estimators=42, random_state=12, n_jobs=-1))]); modelo_precio.fit(X, y_precio)
-    modelo_dias = Pipeline(steps=[('preprocesador', preprocesador),('regresor', RandomForestRegressor(n_estimators=42, random_state=12, n_jobs=-1))]); modelo_dias.fit(X, y_dias)
+    modelo_precio = Pipeline(steps=[('preprocesador', preprocesador),('regresor', RandomForestRegressor(n_estimators=40, random_state=12, n_jobs=-1))]); modelo_precio.fit(X, y_precio)
+    modelo_dias = Pipeline(steps=[('preprocesador', preprocesador),('regresor', RandomForestRegressor(n_estimators=40, random_state=12, n_jobs=-1))]); modelo_dias.fit(X, y_dias)
     modelo_recuperacion = Pipeline(steps=[('preprocesador', preprocesador),('regresor', RandomForestRegressor(n_estimators=27, random_state=8, n_jobs=-1))]); modelo_recuperacion.fit(X, y_recuperacion)
-    modelo_ofertas = Pipeline(steps=[('preprocesador', preprocesador),('regresor', RandomForestRegressor(n_estimators=48, random_state=12, n_jobs=-1))]); modelo_ofertas.fit(X, y_ofertas)
+    modelo_ofertas = Pipeline(steps=[('preprocesador', preprocesador),('regresor', RandomForestRegressor(n_estimators=45, random_state=12, n_jobs=-1))]); modelo_ofertas.fit(X, y_ofertas)
     
     joblib.dump(modelo_precio, 'modelo_precio.joblib', compress=3); joblib.dump(modelo_dias, 'modelo_dias.joblib', compress=3); joblib.dump(modelo_recuperacion, 'modelo_recuperacion.joblib', compress=3); joblib.dump(modelo_ofertas, 'modelo_ofertas.joblib', compress=3)
     joblib.dump(feature_cols, 'feature_cols.joblib')

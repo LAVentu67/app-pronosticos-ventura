@@ -83,74 +83,12 @@ def download_file_from_github(file_name, repo_url="LAVentu67/app-pronosticos-ven
         return None
     
 # --- FUNCIONES OPTIMIZADAS ---
-@st.cache_resource
-def cargar_recursos_iniciales():
-    try:
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        def get_path(filename):
-            return os.path.join(script_dir, filename)
 
-        with st.spinner("Cargando configuración y filtros... 📊"):
-            feature_cols = joblib.load(get_path('feature_cols.joblib'))
-            historical_stats = pd.read_parquet(get_path('historical_stats.parquet'))
-            opciones_filtros = joblib.load(get_path('opciones_filtros.joblib'))
-
-        with st.spinner("Estableciendo conexión con la base de datos... ☁️"):
-            if 'postgres' in st.secrets:
-                DATABASE_URL = st.secrets["postgres"]["db_url"]
-            else:
-                DATABASE_URL = "postgresql://neondb_owner:npg_Rd1vkhV7oCIg@ep-curly-mountain-ae52d80a-pooler.c-2.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
-            engine = create_engine(DATABASE_URL)
-
-        return historical_stats, feature_cols, engine, opciones_filtros
-    except Exception as e:
-        st.error(f"Error crítico al cargar recursos iniciales: {e}")
-        return None, None, None, None
 
 # --- FUNCIONES OPTIMIZADAS (MODIFICADAS) ---
-@st.cache_resource
-def cargar_recursos_iniciales():
-    try:
-        with st.spinner("Descargando configuración y filtros... 📊"):
-            # Descargar en lugar de cargar localmente
-            feature_cols_content = download_file_from_github('feature_cols.joblib')
-            historical_stats_content = download_file_from_github('historical_stats.parquet')
-            opciones_filtros_content = download_file_from_github('opciones_filtros.joblib')
 
-            if not all([feature_cols_content, historical_stats_content, opciones_filtros_content]):
-                st.stop()
 
-            feature_cols = joblib.load(BytesIO(feature_cols_content))
-            historical_stats = pd.read_parquet(BytesIO(historical_stats_content))
-            opciones_filtros = joblib.load(BytesIO(opciones_filtros_content))
 
-        with st.spinner("Estableciendo conexión con la base de datos... ☁️"):
-            # ... (código de conexión sin cambios)
-            DATABASE_URL = st.secrets["postgres"]["db_url"]
-            engine = create_engine(DATABASE_URL)
-
-        return historical_stats, feature_cols, engine, opciones_filtros
-    except Exception as e:
-        st.error(f"Error crítico al cargar recursos iniciales: {e}")
-        return None, None, None, None
-
-@st.cache_resource
-def cargar_modelos():
-    with st.spinner("Descargando modelos de machine learning... 🧠"):
-        # Descargar en lugar de cargar localmente
-        modelo_precio_content = download_file_from_github('modelo_precio.joblib')
-        modelo_dias_content = download_file_from_github('modelo_dias.joblib')
-        modelo_recuperacion_content = download_file_from_github('modelo_recuperacion.joblib')
-        modelo_ofertas_content = download_file_from_github('modelo_ofertas.joblib')
-
-        if not all([modelo_precio_content, modelo_dias_content, modelo_recuperacion_content, modelo_ofertas_content]):
-            st.stop()
-            
-        modelo_precio = joblib.load(BytesIO(modelo_precio_content))
-        modelo_dias = joblib.load(BytesIO(modelo_dias_content))
-        modelo_recuperacion = joblib.load(BytesIO(modelo_recuperacion_content))
-        modelo_ofertas = joblib.load(BytesIO(modelo_ofertas_content))
-    return modelo_precio, modelo_dias, modelo_recuperacion, modelo_ofertas
 
 @st.cache_data(ttl="1h")
 def obtener_datos_filtrados(_engine, filtros_seleccionados):
@@ -720,3 +658,46 @@ with tab3:
                 show_metrics_and_plot(m_tab4, 'NUMERO_DE_OFERTAS', 'PRED_OFERTAS', '# de Ofertas', "{:.1f}", "{:.1f}")
     else:
         st.info("Utiliza los filtros de la barra lateral y presiona 'Analizar / Estimar' para ver los resultados.")
+
+@st.cache_resource
+def cargar_recursos_iniciales():
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+
+        def get_path(filename):
+            return os.path.join(script_dir, filename)
+
+        with st.spinner("Cargando configuración y filtros... 📊"):
+            feature_cols = joblib.load(get_path('feature_cols.joblib'))
+            historical_stats = pd.read_parquet(get_path('historical_stats.parquet'))
+            opciones_filtros = joblib.load(get_path('opciones_filtros.joblib'))
+
+        with st.spinner("Estableciendo conexión con la base de datos... ☁️"):
+            DATABASE_URL = st.secrets["postgres"]["db_url"]
+            engine = create_engine(DATABASE_URL)
+
+        return historical_stats, feature_cols, engine, opciones_filtros
+
+    except Exception as e:
+        st.error(f"Error crítico al cargar recursos iniciales: {e}")
+        return None, None, None, None
+
+
+@st.cache_resource
+def cargar_modelos():
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        def get_path(filename):
+            return os.path.join(script_dir, filename)
+
+        with st.spinner("Cargando modelos de machine learning... 🤖"):
+            modelo_precio = joblib.load(get_path('modelo_precio.joblib'))
+            modelo_dias = joblib.load(get_path('modelo_dias.joblib'))
+            modelo_recuperacion = joblib.load(get_path('modelo_recuperacion.joblib'))
+            modelo_ofertas = joblib.load(get_path('modelo_ofertas.joblib'))
+
+        return modelo_precio, modelo_dias, modelo_recuperacion, modelo_ofertas
+
+    except Exception as e:
+        st.error(f"Error al cargar modelos: {e}")
+        return None, None, None, None
