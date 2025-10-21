@@ -208,16 +208,68 @@ def generate_comparison_plots(_dataframe, real_col, pred_value, _pipeline, _inst
 @st.cache_resource
 def cargar_recursos_iniciales():
     try:
-        client_codes_raw = st.secrets.get("client_codes", {})
-                    client_codes_normalized = {normalize_text(k): v for k, v in client_codes_raw.items()}
-                    grupo_sel_normalized = normalize_text(grupo_sel)
-                    
-                    if client_codes_normalized.get(grupo_sel_normalized) == client_code:
-                        st.session_state.cliente_autenticado = grupo_sel
-                        st.rerun()
-                    else:
-                        st.sidebar.error("Código incorrecto. Acceso denegado.")
-                        st.session_state.cliente_autenticado = None
+    client_codes_raw = st.secrets.get("client_codes", {})
+    client_codes_normalized = {normalize_text(k): v for k, v in client_codes_raw.items()}
+    grupo_sel_normalized = normalize_text(grupo_sel)
+    if client_codes_normalized.get(grupo_sel_normalized) == client_code:
+        st.session_state.cliente_autenticado = grupo_sel
+        st.rerun()
+    else:
+        st.sidebar.error("Código incorrecto. Acceso denegado.")
+        st.session_state.cliente_autenticado = None
+except Exception as e:
+    st.sidebar.error(f"Error al leer los secretos: {e}")
+    st.session_state.cliente_autenticado = None
+
+# --- INTERFAZ DE USUARIO (SIDEBAR) ---
+st.sidebar.image("https://tse1.mm.bing.net/th/id/OIP.dZs9yNpJVa2kZjoE9rx54gAAAA?cb=12&rs=1&pid=ImgDetMain&o=7&rm=3", use_container_width=True)
+st.sidebar.header("Filtros de análisis")
+
+if st.sidebar.button("Eliminar Filtros"):
+    st.session_state.analysis_run = False
+    st.session_state.cliente_autenticado = None
+    keys_to_reset = [key for key in st.session_state if key.endswith('_widget')]
+    for key in keys_to_reset:
+        st.session_state[key] = 'TODOS'
+    st.rerun()
+
+marca_sel = st.sidebar.selectbox("Marca", ["TODOS"] + opciones_filtros['marcas'], key='marca_widget')
+modelos_disponibles = opciones_filtros['modelos_por_marca'].get(marca_sel, []) if marca_sel != 'TODOS' else opciones_filtros['modelos']
+modelo_sel = st.sidebar.selectbox("Modelo", ["TODOS"] + sorted(modelos_disponibles), key='modelo_widget')
+condicion_sel = st.sidebar.selectbox("Condición de Venta", ["TODOS"] + opciones_filtros['condiciones'])
+año_sel = st.sidebar.selectbox("Año del Modelo", ["TODOS"] + opciones_filtros['anios'])
+st.sidebar.markdown("---")
+
+# --- Lógica de autenticación SIN depuración ---
+grupo_sel = st.sidebar.selectbox("Grupo", ["TODOS"] + opciones_filtros['clientes'])
+
+acceso_permitido = False
+
+if grupo_sel == "TODOS":
+    st.session_state.cliente_autenticado = None
+    acceso_permitido = True
+else:
+    if st.session_state.cliente_autenticado == grupo_sel:
+        st.sidebar.success(f"Acceso verificado para: {grupo_sel}")
+        acceso_permitido = True
+    else:
+        st.sidebar.warning(f"Se requiere un código para acceder a los datos de '{grupo_sel}'.")
+        client_code = st.sidebar.text_input("Código de acceso:", type="password", key=f"password_{grupo_sel}")
+        
+        if st.sidebar.button("Verificar Código", key=f"verify_{grupo_sel}"):
+            try:
+    client_codes_raw = st.secrets.get("client_codes", {})
+    client_codes_normalized = {normalize_text(k): v for k, v in client_codes_raw.items()}
+    grupo_sel_normalized = normalize_text(grupo_sel)
+    if client_codes_normalized.get(grupo_sel_normalized) == client_code:
+        st.session_state.cliente_autenticado = grupo_sel
+        st.rerun()
+    else:
+        st.sidebar.error("Código incorrecto. Acceso denegado.")
+        st.session_state.cliente_autenticado = None
+except Exception as e:
+    st.sidebar.error(f"Error al leer los secretos: {e}")
+    st.session_state.cliente_autenticado = None
                 else:
                     st.sidebar.error("Archivo de códigos ('streamlitsecrets.toml') no encontrado.")
                     st.session_state.cliente_autenticado = None
