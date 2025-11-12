@@ -1,0 +1,13 @@
+# Entorno virtual
+venv/
+.venv/
+
+# Archivos de datos crudos
+*.xlsx
+
+# Secretos
+.streamlit/secrets.toml
+
+# Otra app
+Bench/
+.Bench/
